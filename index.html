@@ -177,20 +177,20 @@
       return canvas.toDataURL("image/jpeg", 0.85);
     }
 
-    // base64 → FLUX Kontext → KI-Bild URL
+    // base64 → FLUX Kontext Pro → KI-Bild URL
     async function generateOutfit(base64Image) {
       const payload = {
         prompt: PROMPT,
         image_url: base64Image,
-        num_inference_steps: 28,
-        guidance_scale: 2.5,
+        guidance_scale: 3.5,
         num_images: 1,
-        enable_safety_checker: false,
         output_format: "jpeg",
-        resolution_mode: "match_input"
+        safety_tolerance: "6",
+        enhance_prompt: false,
+        aspect_ratio: "3:4"
       };
 
-      const response = await fetch("https://fal.run/fal-ai/flux-kontext/dev", {
+      const response = await fetch("https://fal.run/fal-ai/flux-pro/kontext", {
         method: "POST",
         headers: {
           "Authorization": `Key ${FAL_API_KEY}`,
