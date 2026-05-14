@@ -240,20 +240,6 @@
       return data.images[0].url;
     }
 
-    // base64 → Cloudinary (kein Slideshow-Tag, nur als Backup)
-    async function uploadOriginalToCloudinary(base64Image) {
-      const form = new FormData();
-      form.append("file", base64Image);
-      form.append("upload_preset", CLOUDINARY_PRESET);
-      form.append("folder", "party-photobooth");
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
-        { method: "POST", body: form }
-      );
-      if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
-    }
-
     // AI-Ergebnis-URL → Cloudinary hochladen (mit Slideshow-Tags)
     async function uploadResultToCloudinary(imageUrl) {
       const imgBlob = await fetch(imageUrl).then(r => r.blob());
@@ -271,12 +257,6 @@
       if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
     }
 
-    // Im Hintergrund: AI generieren + in Slideshow hochladen
-    async function processInBackground(base64) {
-      const aiImageUrl = await generateOutfit(base64);
-      await uploadResultToCloudinary(aiImageUrl);
-    }
-
     // Haupt-Flow
     btnShoot.addEventListener("click", async () => {
       btnShoot.disabled = true;
@@ -285,22 +265,19 @@
 
       try {
         // 1. Foto machen
-        setStatus("Einen Moment bitte…");
         const base64 = capturePhoto();
         video.style.display = "none";
         canvas.style.display = "block";
 
-        // 2. Original hochladen (~2s) — danach Danke zeigen
+        // 2. KI + Upload abwarten
         setStatus("Einen Moment bitte…", true);
-        await uploadOriginalToCloudinary(base64);
+        const aiImageUrl = await generateOutfit(base64);
+        await uploadResultToCloudinary(aiImageUrl);
 
         // 3. Danke-Screen zeigen
         canvas.style.display = "none";
         thankyou.style.display = "flex";
         setStatus("");
-
-        // 4. AI + Slideshow-Upload im Hintergrund (nicht awaited)
-        processInBackground(base64).catch(e => console.warn("Hintergrund-Fehler:", e));
 
       } catch (e) {
         console.error(e);
