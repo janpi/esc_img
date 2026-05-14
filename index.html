@@ -141,8 +141,7 @@
     const CLOUDINARY_PRESET  = "esc_img_upload";       // Cloudinary → Settings → Upload Presets (unsigned)
     // ─────────────────────────────────────────────────────────────────────────
 
-    const SYSTEM_PROMPT = "You are a professional photo editor. Your job is to edit clothing and backgrounds only. You must NEVER change a person's face, facial features, skin tone, hair, or body shape. The face must remain 100% identical to the input photo.";
-    const PROMPT = "Change this person's outfit to a spectacular Eurovision Song Contest stage costume covered in sequins, feathers and glitter. Replace the background with a colorful concert stage with dramatic spotlights. Do not change the face, hair or body in any way.";
+    const PROMPT = "Replace only the person's clothing with a flamboyant Eurovision Song Contest stage costume covered in sequins, feathers and glitter. Keep the person's face, hair, skin tone, body shape, pose and the background completely unchanged.";
 
     const video      = document.getElementById("video");
     const canvas     = document.getElementById("canvas");
@@ -178,37 +177,21 @@
       return canvas.toDataURL("image/jpeg", 0.85);
     }
 
-    // Selfie als base64 → Cloudinary hochladen → öffentliche URL zurückgeben
-    async function uploadOriginalToCloudinary(base64Image) {
-      const form = new FormData();
-      form.append("file", base64Image);
-      form.append("upload_preset", CLOUDINARY_PRESET);
-      form.append("folder", "party-photobooth");
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
-        { method: "POST", body: form }
-      );
-      if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
-      const data = await response.json();
-      return data.secure_url;
-    }
-
-    // Bild-URL → nano-banana/edit → KI-Bild URL
-    async function generateOutfit(imageUrl) {
+    // base64 → FLUX Kontext → KI-Bild URL
+    async function generateOutfit(base64Image) {
       const payload = {
         prompt: PROMPT,
-        system_prompt: SYSTEM_PROMPT,
-        image_urls: [imageUrl],
+        image_url: base64Image,
+        num_inference_steps: 28,
+        guidance_scale: 3.5,
         num_images: 1,
-        aspect_ratio: "3:4",
+        enable_safety_checker: false,
         output_format: "jpeg",
-        safety_tolerance: "6",
-        resolution: "1K"
+        acceleration: "high",
+        resolution_mode: "match_input"
       };
-      console.log("🚀 fal.ai Request payload:", JSON.stringify(payload, null, 2));
 
-      const response = await fetch("https://fal.run/fal-ai/nano-banana-2/edit", {
+      const response = await fetch("https://fal.run/fal-ai/flux-kontext/dev", {
         method: "POST",
         headers: {
           "Authorization": `Key ${FAL_API_KEY}`,
@@ -221,7 +204,6 @@
         throw new Error(`fal.ai Fehler: ${response.status} – ${errText}`);
       }
       const data = await response.json();
-      console.log("✅ fal.ai Response:", JSON.stringify(data, null, 2));
       return data.images[0].url;
     }
 
@@ -257,19 +239,15 @@
         video.style.display = "none";
         canvas.style.display = "block";
 
-        // 2. Foto hochladen damit fal.ai eine URL bekommt
-        setStatus("⬆️ Foto wird vorbereitet…", true);
-        const originalUrl = await uploadOriginalToCloudinary(base64);
-
-        // 3. KI generiert Outfit
+        // 2. KI generiert Outfit
         setStatus("🎨 KI zieht dir ein Outfit an…", true);
-        const aiImageUrl = await generateOutfit(originalUrl);
+        const aiImageUrl = await generateOutfit(base64);
 
-        // 4. Ergebnis zu Cloudinary hochladen
+        // 3. Ergebnis zu Cloudinary hochladen
         setStatus("⬆️ Bild wird gespeichert…", true);
         const cloudUrl = await uploadResultToCloudinary(aiImageUrl);
 
-        // 5. Ergebnis zeigen
+        // 4. Ergebnis zeigen
         resultImg.src = cloudUrl;
         resultWrap.style.display = "flex";
         setStatus("🌟 Dein Song-Contest-Look ist fertig!");
