@@ -141,7 +141,7 @@
     const CLOUDINARY_PRESET  = "esc_img_upload";       // Cloudinary → Settings → Upload Presets (unsigned)
     // ─────────────────────────────────────────────────────────────────────────
 
-    const PROMPT = "Replace only the person's clothing with a flamboyant Eurovision Song Contest stage costume covered in sequins, feathers and glitter. Keep the person's face, hair, skin tone, body shape, pose and the background completely unchanged.";
+    const PROMPT = "Change only the clothing this person is wearing. Replace the outfit with a glittery, sequined Eurovision Song Contest stage costume with feathers. Do not touch the background — keep it exactly as it is. Do not change the face, hair, glasses, skin, or anything other than the clothing.";
 
     const video      = document.getElementById("video");
     const canvas     = document.getElementById("canvas");
@@ -183,11 +183,10 @@
         prompt: PROMPT,
         image_url: base64Image,
         num_inference_steps: 28,
-        guidance_scale: 3.5,
+        guidance_scale: 2.5,
         num_images: 1,
         enable_safety_checker: false,
         output_format: "jpeg",
-        acceleration: "high",
         resolution_mode: "match_input"
       };
 
