@@ -26,6 +26,16 @@
 
     #slide-a { opacity: 1; z-index: 1; }
     #slide-b { opacity: 0; z-index: 2; }
+
+    #progress {
+      position: fixed;
+      bottom: 0; left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ff6ec7, #ffe066);
+      z-index: 20;
+      width: 0%;
+      transition: width linear;
+    }
   </style>
 </head>
 <body>
@@ -33,17 +43,19 @@
   <!-- ─── KONFIGURATION ──────────────────────────────────────────────── -->
   <script>
     const CLOUDINARY_CLOUD = "djwn28ean";
-    const SLIDE_DURATION   = 3000;   // Millisekunden pro Bild
+    const SLIDE_DURATION   = 4500;   // Millisekunden pro Bild
     const POLL_INTERVAL    = 8000;   // Wie oft nach neuen Bildern suchen
   </script>
   <!-- ──────────────────────────────────────────────────────────────────── -->
 
   <div id="slide-a"></div>
   <div id="slide-b"></div>
+  <div id="progress"></div>
 
   <script>
     const slideA   = document.getElementById("slide-a");
     const slideB   = document.getElementById("slide-b");
+    const progress = document.getElementById("progress");
 
     let images       = [];
     let currentIndex = 0;
@@ -106,9 +118,19 @@
       activeSlide = activeSlide === "a" ? "b" : "a";
     }
 
+    function animateProgress() {
+      progress.style.transition = "none";
+      progress.style.width = "0%";
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        progress.style.transition = `width ${SLIDE_DURATION}ms linear`;
+        progress.style.width = "100%";
+      }));
+    }
+
     function nextSlide() {
       if (images.length === 0) return;
       showSlide(images[currentIndex]);
+      animateProgress();
       currentIndex = (currentIndex + 1) % images.length;
     }
 
