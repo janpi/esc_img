@@ -93,7 +93,7 @@
       min-height: 22px;
     }
 
-    #thankyou {
+    .esc-screen {
       display: none;
       flex-direction: column;
       align-items: center;
@@ -103,7 +103,7 @@
       max-width: 420px;
     }
 
-    #thankyou .esc-icon {
+    .esc-screen .esc-icon {
       font-size: 4rem;
       margin-bottom: 16px;
       animation: pulse 2s ease-in-out infinite;
@@ -114,7 +114,7 @@
       50% { transform: scale(1.12); }
     }
 
-    #thankyou h2 {
+    .esc-screen h2 {
       font-size: 1.6rem;
       font-weight: 800;
       background: linear-gradient(135deg, #ff6ec7, #ffe066, #6ec6ff);
@@ -124,9 +124,15 @@
       line-height: 1.3;
     }
 
-    #thankyou p {
+    .esc-screen p {
       color: #aaa;
       font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .esc-screen small {
+      color: #555;
+      font-size: 0.8rem;
     }
 
     .spinner {
@@ -155,7 +161,14 @@
 
   <div id="status"></div>
 
-  <div id="thankyou">
+  <div id="waiting" class="esc-screen">
+    <div class="esc-icon">✨</div>
+    <h2>Vielen Dank!</h2>
+    <p><span class="spinner"></span>Einen Moment bitte…</p>
+    <small>(Browser nicht schließen)</small>
+  </div>
+
+  <div id="thankyou" class="esc-screen">
     <div class="esc-icon">🎤</div>
     <h2>Vielen Dank, und willkommen beim ESC 2026!</h2>
     <p>Dein Look erscheint gleich auf dem grossen Bildschirm.</p>
@@ -177,6 +190,7 @@
     const btnRetry   = document.getElementById("btn-retry");
     const btnFlip    = document.getElementById("btn-flip");
     const status     = document.getElementById("status");
+    const waiting    = document.getElementById("waiting");
     const thankyou   = document.getElementById("thankyou");
 
     let facingMode = "user";
@@ -272,18 +286,19 @@
         const base64 = capturePhoto();
         cameraWrap.style.display = "none";
         btnShoot.style.display = "none";
+        waiting.style.display = "flex";
 
         // 2. KI + Upload abwarten
-        setStatus("Einen Moment bitte…", true);
         const aiImageUrl = await generateOutfit(base64);
         await uploadResultToCloudinary(aiImageUrl);
 
         // 3. Danke-Screen zeigen
+        waiting.style.display = "none";
         thankyou.style.display = "flex";
-        setStatus("");
 
       } catch (e) {
         console.error(e);
+        waiting.style.display = "none";
         setStatus("❌ Fehler: " + e.message);
         cameraWrap.style.display = "block";
         btnShoot.style.display = "block";
@@ -297,6 +312,7 @@
       cameraWrap.style.display = "block";
       btnShoot.style.display = "block";
       btnRetry.style.display = "none";
+      waiting.style.display = "none";
       thankyou.style.display = "none";
       setStatus("");
     });
