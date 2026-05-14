@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎤 Song Contest Slideshow</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+
+    /* Slideshow Container */
+    #slide-a, #slide-b {
+      position: absolute;
+      inset: 0;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-color: #000;
+      transition: opacity 1.2s ease;
+    }
+
+    #slide-a { opacity: 1; z-index: 1; }
+    #slide-b { opacity: 0; z-index: 2; }
+
+    /* Overlay oben */
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+    }
+
+    #overlay h1 {
+      font-size: 1.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #ff6ec7, #ffe066, #6ec6ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #counter {
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* Overlay unten */
+    #bottom {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 10;
+      padding: 18px 28px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+    }
+
+    #qr-hint {
+      font-size: 1rem;
+      color: rgba(255,255,255,0.6);
+      text-align: center;
+    }
+
+    #qr-hint span {
+      color: #ffe066;
+      font-weight: 700;
+    }
+
+    /* Leerer Zustand */
+    #empty {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      z-index: 5;
+    }
+
+    #empty h2 {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ff6ec7, #ffe066, #6ec6ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #empty p { color: #666; font-size: 1rem; }
+
+    /* Progress Bar */
+    #progress {
+      position: fixed;
+      bottom: 0; left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #ff6ec7, #ffe066);
+      z-index: 20;
+      width: 0%;
+      transition: width linear;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── KONFIGURATION ──────────────────────────────────────────────── -->
+  <script>
+    const CLOUDINARY_CLOUD  = "DEIN_CLOUD_NAME";    // gleicher Wert wie in index.html
+    const CLOUDINARY_FOLDER = "party-photobooth";   // gleicher Ordner wie in index.html
+    const SLIDE_DURATION    = 6000;                 // Millisekunden pro Bild (6 Sek.)
+    const POLL_INTERVAL     = 8000;                 // Wie oft nach neuen Bildern suchen (8 Sek.)
+    const QR_URL            = "DEINE_GITHUB_PAGES_URL"; // z.B. https://username.github.io/party-photobooth
+  </script>
+  <!-- ──────────────────────────────────────────────────────────────────── -->
+
+  <div id="overlay">
+    <h1>🎤 Song Contest Photobooth</h1>
+    <div id="counter">0 Fotos</div>
+  </div>
+
+  <div id="slide-a"></div>
+  <div id="slide-b"></div>
+
+  <div id="empty">
+    <h2>Noch keine Fotos 📸</h2>
+    <p>Scannt den QR-Code und macht das erste Foto!</p>
+  </div>
+
+  <div id="bottom">
+    <div id="qr-hint">📱 Mach dein Foto → <span id="qr-url"></span></div>
+  </div>
+
+  <div id="progress" id="progress"></div>
+
+  <script>
+    const slideA   = document.getElementById("slide-a");
+    const slideB   = document.getElementById("slide-b");
+    const counter  = document.getElementById("counter");
+    const empty    = document.getElementById("empty");
+    const progress = document.getElementById("progress");
+    document.getElementById("qr-url").textContent = QR_URL;
+
+    let images        = [];
+    let currentIndex  = 0;
+    let activeSlide   = "a";   // welche Slide gerade sichtbar ist
+    let slideTimer    = null;
+    let progressTimer = null;
+
+    // ── Cloudinary Bildliste laden ──────────────────────────────────────
+    async function fetchImages() {
+      try {
+        // Cloudinary Search API (unsigned, read-only)
+        const response = await fetch(
+          `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/list/${CLOUDINARY_FOLDER}.json`
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+
+        const urls = (data.resources || [])
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // neueste zuerst
+          .map(r => `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/q_auto,f_auto/${r.public_id}`);
+
+        const hadImages = images.length > 0;
+        images = urls;
+        counter.textContent = `${images.length} Foto${images.length !== 1 ? "s" : ""}`;
+
+        if (images.length > 0) {
+          empty.style.display = "none";
+          if (!hadImages) startSlideshow(); // erstes Mal starten
+        }
+      } catch (e) {
+        console.warn("Fetch-Fehler:", e);
+      }
+    }
+
+    // ── Slideshow ───────────────────────────────────────────────────────
+    function showSlide(url) {
+      const incoming = activeSlide === "a" ? slideB : slideA;
+      const outgoing = activeSlide === "a" ? slideA : slideB;
+
+      incoming.style.backgroundImage = `url('${url}')`;
+      incoming.style.opacity = "1";
+      incoming.style.zIndex  = "2";
+      outgoing.style.opacity = "0";
+      outgoing.style.zIndex  = "1";
+
+      activeSlide = activeSlide === "a" ? "b" : "a";
+    }
+
+    function animateProgress() {
+      progress.style.transition = "none";
+      progress.style.width = "0%";
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          progress.style.transition = `width ${SLIDE_DURATION}ms linear`;
+          progress.style.width = "100%";
+        });
+      });
+    }
+
+    function nextSlide() {
+      if (images.length === 0) return;
+      showSlide(images[currentIndex]);
+      animateProgress();
+      currentIndex = (currentIndex + 1) % images.length;
+    }
+
+    function startSlideshow() {
+      nextSlide();
+      slideTimer = setInterval(nextSlide, SLIDE_DURATION);
+    }
+
+    // ── Init ────────────────────────────────────────────────────────────
+    fetchImages();
+    setInterval(fetchImages, POLL_INTERVAL);
+  </script>
+</body>
+</html>
