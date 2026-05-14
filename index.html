@@ -181,28 +181,7 @@
 
     // base64 → fal.ai → KI-Bild URL
     async function generateOutfit(base64Image) {
-      // Schritt 1: Upload-URL von fal.ai holen um das Foto hochzuladen
-      const uploadResp = await fetch("https://fal.run/fal-ai/storage/upload/initiate", {
-        method: "POST",
-        headers: {
-          "Authorization": `Key ${FAL_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ content_type: "image/jpeg" })
-      });
-      if (!uploadResp.ok) throw new Error(`fal.ai Upload-Init Fehler: ${uploadResp.status}`);
-      const { upload_url, file_url } = await uploadResp.json();
-
-      // Schritt 2: Foto als Blob zu fal.ai hochladen
-      const blob = await fetch(base64Image).then(r => r.blob());
-      const putResp = await fetch(upload_url, {
-        method: "PUT",
-        headers: { "Content-Type": "image/jpeg" },
-        body: blob
-      });
-      if (!putResp.ok) throw new Error(`fal.ai Upload Fehler: ${putResp.status}`);
-
-      // Schritt 3: KI generiert Outfit
+      // fal.ai akzeptiert base64 Data URIs direkt als image_url — kein Upload nötig
       const response = await fetch("https://fal.run/fal-ai/flux-general/image-to-image", {
         method: "POST",
         headers: {
@@ -211,17 +190,18 @@
         },
         body: JSON.stringify({
           prompt: PROMPT,
-          image_url: file_url,
-          strength: 0.85,
+          image_url: base64Image,   // base64 data URI direkt
+          strength: 0.90,           // 0.0 = original, 1.0 = komplett neu — hoch für starkes Outfit
           num_inference_steps: 28,
-          guidance_scale: 7.5,
+          guidance_scale: 3.5,      // Flux-Standard
           num_images: 1,
-          enable_safety_checker: false
+          enable_safety_checker: false,
+          negative_prompt: "deformed face, ugly, blurry, bad anatomy"
         })
       });
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`fal.ai Generierung Fehler: ${response.status} – ${errText}`);
+        throw new Error(`fal.ai Fehler: ${response.status} – ${errText}`);
       }
       const data = await response.json();
       return data.images[0].url;
