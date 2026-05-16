@@ -253,7 +253,7 @@
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = (e) => processPhoto(e.target.result);
+      reader.onload = (e) => resizeAndProcess(e.target.result);
       reader.readAsDataURL(file);
     });
 
@@ -304,6 +304,28 @@
         { method: "POST", body: form }
       );
       if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
+    }
+
+    // Bild auf max. 1080×1440 skalieren, bevor es an die API geht
+    function resizeImage(dataUrl, maxW, maxH) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          const ratio = Math.min(maxW / w, maxH / h);
+          if (ratio < 1) { w = Math.round(w * ratio); h = Math.round(h * ratio); }
+          const canvas = document.createElement("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.src = dataUrl;
+      });
+    }
+
+    async function resizeAndProcess(dataUrl) {
+      const resized = await resizeImage(dataUrl, 1080, 1440);
+      processPhoto(resized);
     }
 
     // Haupt-Flow: Foto → KI → Upload
