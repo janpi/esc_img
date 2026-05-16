@@ -19,23 +19,6 @@
       padding: 20px;
     }
 
-    #preview-wrap {
-      display: none;
-      width: 100%;
-      max-width: 420px;
-      border-radius: 16px;
-      overflow: hidden;
-      background: #1a1a2e;
-      aspect-ratio: 3/4;
-    }
-
-    #preview-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
     .btn {
       margin-top: 18px;
       width: 100%;
@@ -54,12 +37,6 @@
     #btn-shoot {
       background: linear-gradient(135deg, #ff6ec7, #ffe066);
       color: #000;
-    }
-
-    #btn-go {
-      background: linear-gradient(135deg, #6ec6ff, #ff6ec7);
-      color: #000;
-      display: none;
     }
 
     #btn-retry {
@@ -135,20 +112,15 @@
 
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
-  <div id="preview-wrap">
-    <img id="preview-img" alt="Dein Foto">
-  </div>
-
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <button class="btn" id="btn-go">✨ Mach mich Song Contest!</button>
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
 
   <div id="status"></div>
 
   <div id="waiting" class="esc-screen">
     <div class="esc-icon">✨</div>
-    <h2>Vielen Dank!</h2>
-    <p><span class="spinner"></span>Einen Moment bitte…</p>
+    <h2>Einen Moment bitte…</h2>
+    <p><span class="spinner"></span>Dein ESC-Look wird kreiert</p>
     <small>(Browser nicht schließen)</small>
   </div>
 
@@ -248,17 +220,12 @@
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const photoInput  = document.getElementById("photo-input");
-    const previewWrap = document.getElementById("preview-wrap");
-    const previewImg  = document.getElementById("preview-img");
-    const btnShoot    = document.getElementById("btn-shoot");
-    const btnGo       = document.getElementById("btn-go");
-    const btnRetry    = document.getElementById("btn-retry");
-    const status      = document.getElementById("status");
-    const waiting     = document.getElementById("waiting");
-    const thankyou    = document.getElementById("thankyou");
-
-    let capturedDataUrl = null;
+    const photoInput = document.getElementById("photo-input");
+    const btnShoot   = document.getElementById("btn-shoot");
+    const btnRetry   = document.getElementById("btn-retry");
+    const status     = document.getElementById("status");
+    const waiting    = document.getElementById("waiting");
+    const thankyou   = document.getElementById("thankyou");
 
     function setStatus(msg, loading = false) {
       status.innerHTML = loading
@@ -267,14 +234,11 @@
     }
 
     function showShootScreen() {
-      previewWrap.style.display = "none";
-      btnShoot.style.display   = "block";
-      btnGo.style.display      = "none";
-      btnRetry.style.display   = "none";
-      waiting.style.display    = "none";
-      thankyou.style.display   = "none";
+      btnShoot.style.display  = "block";
+      btnRetry.style.display  = "none";
+      waiting.style.display   = "none";
+      thankyou.style.display  = "none";
       setStatus("");
-      capturedDataUrl = null;
     }
 
     // "Foto aufnehmen" → öffnet native Kamera-App
@@ -283,24 +247,17 @@
       photoInput.click();
     });
 
-    // Foto wurde aufgenommen → Vorschau zeigen
+    // Foto wurde aufgenommen → sofort verarbeiten
     photoInput.addEventListener("change", () => {
       const file = photoInput.files[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = (e) => {
-        capturedDataUrl = e.target.result;
-        previewImg.src = capturedDataUrl;
-        previewWrap.style.display = "block";
-        btnShoot.style.display    = "none";
-        btnGo.style.display       = "block";
-        btnRetry.style.display    = "block";
-      };
+      reader.onload = (e) => processPhoto(e.target.result);
       reader.readAsDataURL(file);
     });
 
-    // "Nochmal" → zurück zur Kamera
+    // "Nochmal" → zurück
     btnRetry.addEventListener("click", showShootScreen);
 
     // base64 → FLUX Kontext Pro → KI-Bild URL
@@ -349,19 +306,13 @@
       if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
     }
 
-    // Haupt-Flow: Foto bestätigen → KI → Upload
-    btnGo.addEventListener("click", async () => {
-      if (!capturedDataUrl) return;
-      btnGo.disabled    = true;
-      btnRetry.disabled = true;
+    // Haupt-Flow: Foto → KI → Upload
+    async function processPhoto(dataUrl) {
+      btnShoot.style.display = "none";
+      waiting.style.display  = "flex";
 
       try {
-        previewWrap.style.display = "none";
-        btnGo.style.display       = "none";
-        btnRetry.style.display    = "none";
-        waiting.style.display     = "flex";
-
-        const aiImageUrl = await generateOutfit(capturedDataUrl);
+        const aiImageUrl = await generateOutfit(dataUrl);
         await uploadResultToCloudinary(aiImageUrl);
 
         waiting.style.display  = "none";
@@ -371,14 +322,10 @@
         console.error(e);
         waiting.style.display = "none";
         setStatus("❌ Fehler: " + e.message);
-        previewWrap.style.display = "block";
-        btnGo.style.display       = "block";
-        btnRetry.style.display    = "block";
-      } finally {
-        btnGo.disabled    = false;
-        btnRetry.disabled = false;
+        btnShoot.style.display = "block";
+        btnRetry.style.display = "block";
       }
-    });
+    }
   </script>
 </body>
 </html>
