@@ -36,6 +36,66 @@
       width: 0%;
       transition: width linear;
     }
+
+    #empty {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+      background: #000;
+    }
+
+    .esc-heart {
+      width: 160px;
+      height: 160px;
+      margin-bottom: 32px;
+      animation: heartbeat 2.4s ease-in-out infinite;
+      filter: drop-shadow(0 0 32px rgba(255, 110, 199, 0.5));
+    }
+
+    @keyframes heartbeat {
+      0%, 100% { transform: scale(1); }
+      14%       { transform: scale(1.08); }
+      28%       { transform: scale(1); }
+      42%       { transform: scale(1.05); }
+      56%       { transform: scale(1); }
+    }
+
+    .esc-wordmark {
+      font-family: system-ui, sans-serif;
+      font-size: clamp(1rem, 3vw, 1.6rem);
+      font-weight: 300;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #fff;
+      opacity: 0.7;
+      margin-bottom: 8px;
+    }
+
+    .esc-year {
+      font-family: system-ui, sans-serif;
+      font-size: clamp(4rem, 14vw, 9rem);
+      font-weight: 900;
+      line-height: 1;
+      background: linear-gradient(135deg, #ff6ec7 0%, #ffe066 50%, #6ec6ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .esc-city {
+      font-family: system-ui, sans-serif;
+      font-size: clamp(0.9rem, 2.5vw, 1.3rem);
+      font-weight: 400;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      color: #fff;
+      opacity: 0.45;
+      margin-top: 12px;
+    }
   </style>
 </head>
 <body>
@@ -48,6 +108,22 @@
   </script>
   <!-- ──────────────────────────────────────────────────────────────────── -->
 
+  <div id="empty">
+    <svg class="esc-heart" viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="hg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stop-color="#ff6ec7"/>
+          <stop offset="50%"  stop-color="#ffe066"/>
+          <stop offset="100%" stop-color="#6ec6ff"/>
+        </linearGradient>
+      </defs>
+      <path fill="url(#hg)" d="M50 85 C50 85 5 55 5 28 C5 14 16 5 28 5 C36 5 44 9 50 16 C56 9 64 5 72 5 C84 5 95 14 95 28 C95 55 50 85 50 85Z"/>
+    </svg>
+    <div class="esc-wordmark">Eurovision Song Contest</div>
+    <div class="esc-year">2026</div>
+    <div class="esc-city">Basel</div>
+  </div>
+
   <div id="slide-a"></div>
   <div id="slide-b"></div>
   <div id="progress"></div>
@@ -56,6 +132,7 @@
     const slideA   = document.getElementById("slide-a");
     const slideB   = document.getElementById("slide-b");
     const progress = document.getElementById("progress");
+    const empty    = document.getElementById("empty");
 
     let images       = [];
     let currentIndex = 0;
@@ -98,7 +175,10 @@
           images = [...newUrls, ...images];
         }
 
-        if (images.length > 0 && !hadImages) startSlideshow();
+        if (images.length > 0 && !hadImages) {
+          empty.style.display = "none";
+          startSlideshow();
+        }
       } catch (e) {
         console.warn("Fetch-Fehler:", e);
       }
