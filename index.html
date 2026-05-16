@@ -19,6 +19,46 @@
       padding: 20px;
     }
 
+    #camera-wrap {
+      position: relative;
+      width: 100%;
+      max-width: 420px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: #1a1a2e;
+      aspect-ratio: 3/4;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    canvas { display: none; }
+
+    #btn-flip {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      font-size: 1.3rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+      transition: background 0.2s;
+      z-index: 5;
+    }
+    #btn-flip:active { background: rgba(0,0,0,0.7); }
+
     .btn {
       margin-top: 18px;
       width: 100%;
@@ -110,18 +150,22 @@
 </head>
 <body>
 
-  <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
+  <div id="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+    <button id="btn-flip" title="Kamera wechseln">🔄</button>
+  </div>
 
-  <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
+  <button class="btn" id="btn-shoot">🎤 Mach mich Song Contest!</button>
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
-  <div id="version" style="margin-top:12px;font-size:0.72rem;color:#666;letter-spacing:0.05em;">v3.2</div>
+  <div style="margin-top:12px;font-size:0.72rem;color:#666;letter-spacing:0.05em;">v3.3</div>
 
   <div id="status"></div>
 
   <div id="waiting" class="esc-screen">
     <div class="esc-icon">✨</div>
-    <h2>Einen Moment bitte…</h2>
-    <p><span class="spinner"></span>Dein ESC-Look wird kreiert</p>
+    <h2>Vielen Dank!</h2>
+    <p><span class="spinner"></span>Einen Moment bitte…</p>
     <small>(Browser nicht schließen)</small>
   </div>
 
@@ -206,11 +250,11 @@
         "Replace the background with a velvety dark background with slowly radiating soft rainbow light rings, no objects, no people",
       ];
 
-      const outfit   = pick(outfitBase);
-      const color    = pick(colorPalette);
-      const details  = pickN(embellishments, 2).join(" and ");
+      const outfit    = pick(outfitBase);
+      const color     = pick(colorPalette);
+      const details   = pickN(embellishments, 2).join(" and ");
       const accessory = pick(accessories);
-      const bg       = pick(backgrounds);
+      const bg        = pick(backgrounds);
 
       return (
         `Leave the face, body, and gender of the person completely unchanged and realistic — keep men as men and women as women. ` +
@@ -222,12 +266,38 @@
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const photoInput = document.getElementById("photo-input");
+    const video      = document.getElementById("video");
+    const canvas     = document.getElementById("canvas");
+    const cameraWrap = document.getElementById("camera-wrap");
     const btnShoot   = document.getElementById("btn-shoot");
     const btnRetry   = document.getElementById("btn-retry");
+    const btnFlip    = document.getElementById("btn-flip");
     const status     = document.getElementById("status");
     const waiting    = document.getElementById("waiting");
     const thankyou   = document.getElementById("thankyou");
+
+    let facingMode = "user";
+
+    async function startCamera() {
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(t => t.stop());
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode, width: { ideal: 1080 }, height: { ideal: 1440 } },
+          audio: false
+        });
+        video.srcObject = stream;
+      } catch (e) {
+        setStatus("❌ Kamera-Zugriff verweigert. Bitte erlauben und neu laden.");
+        btnShoot.disabled = true;
+      }
+    }
+
+    btnFlip.addEventListener("click", () => {
+      facingMode = facingMode === "user" ? "environment" : "user";
+      startCamera();
+    });
 
     function setStatus(msg, loading = false) {
       status.innerHTML = loading
@@ -235,32 +305,12 @@
         : msg;
     }
 
-    function showShootScreen() {
-      btnShoot.style.display  = "block";
-      btnRetry.style.display  = "none";
-      waiting.style.display   = "none";
-      thankyou.style.display  = "none";
-      setStatus("");
+    function capturePhoto() {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      return canvas.toDataURL("image/jpeg", 0.85);
     }
-
-    // "Foto aufnehmen" → öffnet native Kamera-App
-    btnShoot.addEventListener("click", () => {
-      photoInput.value = "";
-      photoInput.click();
-    });
-
-    // Foto wurde aufgenommen → sofort verarbeiten
-    photoInput.addEventListener("change", () => {
-      const file = photoInput.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (e) => resizeAndProcess(e.target.result);
-      reader.readAsDataURL(file);
-    });
-
-    // "Nochmal" → zurück
-    btnRetry.addEventListener("click", showShootScreen);
 
     // base64 → FLUX Kontext Pro → KI-Bild URL
     async function generateOutfit(base64Image) {
@@ -291,7 +341,7 @@
       return data.images[0].url;
     }
 
-    // AI-Ergebnis-URL → Cloudinary hochladen
+    // AI-Ergebnis-URL → Cloudinary hochladen (mit Slideshow-Tags)
     async function uploadResultToCloudinary(imageUrl) {
       const form = new FormData();
       form.append("file", imageUrl);
@@ -306,48 +356,49 @@
       if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
     }
 
-    // Bild auf max. 1080×1440 skalieren, bevor es an die API geht
-    function resizeImage(dataUrl, maxW, maxH) {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-          let w = img.width, h = img.height;
-          const ratio = Math.min(maxW / w, maxH / h);
-          if (ratio < 1) { w = Math.round(w * ratio); h = Math.round(h * ratio); }
-          const canvas = document.createElement("canvas");
-          canvas.width = w; canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL("image/jpeg", 0.85));
-        };
-        img.src = dataUrl;
-      });
-    }
-
-    async function resizeAndProcess(dataUrl) {
-      const resized = await resizeImage(dataUrl, 1080, 1440);
-      processPhoto(resized);
-    }
-
-    // Haupt-Flow: Foto → KI → Upload
-    async function processPhoto(dataUrl) {
-      btnShoot.style.display = "none";
-      waiting.style.display  = "flex";
+    // Haupt-Flow
+    btnShoot.addEventListener("click", async () => {
+      btnShoot.disabled = true;
+      btnRetry.style.display = "none";
+      thankyou.style.display = "none";
 
       try {
-        const aiImageUrl = await generateOutfit(dataUrl);
+        // 1. Foto machen, Kamera ausblenden
+        const base64 = capturePhoto();
+        cameraWrap.style.display = "none";
+        btnShoot.style.display = "none";
+        waiting.style.display = "flex";
+
+        // 2. KI + Upload abwarten
+        const aiImageUrl = await generateOutfit(base64);
         await uploadResultToCloudinary(aiImageUrl);
 
-        waiting.style.display  = "none";
+        // 3. Danke-Screen zeigen
+        waiting.style.display = "none";
         thankyou.style.display = "flex";
 
       } catch (e) {
         console.error(e);
         waiting.style.display = "none";
         setStatus("❌ Fehler: " + e.message);
+        cameraWrap.style.display = "block";
         btnShoot.style.display = "block";
         btnRetry.style.display = "block";
+      } finally {
+        btnShoot.disabled = false;
       }
-    }
+    });
+
+    btnRetry.addEventListener("click", () => {
+      cameraWrap.style.display = "block";
+      btnShoot.style.display = "block";
+      btnRetry.style.display = "none";
+      waiting.style.display = "none";
+      thankyou.style.display = "none";
+      setStatus("");
+    });
+
+    startCamera();
   </script>
 </body>
 </html>
