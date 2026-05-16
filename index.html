@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.6</div>
+  <div id="version">v1.7</div>
 
   <div id="status"></div>
 
@@ -130,13 +130,14 @@
     <h2>Einen Moment bitte…</h2>
     <p><span class="spinner"></span><span id="waiting-step">Bild wird vorbereitet…</span></p>
     <small id="waiting-timer"></small>
-    <small>(Browser nicht schließen)</small>
+    <small>⚠️ Browser nicht schließen!</small>
   </div>
 
   <div id="thankyou" class="esc-screen">
     <div class="esc-icon">🎤</div>
     <h2>Vielen Dank, und willkommen beim ESC Wien 2026!</h2>
-    <p>Dein Look erscheint gleich auf dem grossen Bildschirm.</p>
+    <p>Dein Look erscheint in ca. 1 Minute auf dem grossen Bildschirm.</p>
+    <small>⚠️ Browser noch kurz offen lassen!</small>
   </div>
 
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
@@ -420,7 +421,10 @@
         const originalUrl = await uploadOriginalToCloudinary(dataUrl);
 
         setStep("Wird an die KI übermittelt…");
-        await submitOutfitJob(originalUrl); // nur einreichen, nicht warten
+        await submitOutfitJob(originalUrl);
+
+        setStep("Dein Look wird kreiert – gleich fertig! ✨");
+        await new Promise(r => setTimeout(r, 4000)); // kurz anzeigen lassen
 
         stopTimer();
         waiting.style.display  = "none";
