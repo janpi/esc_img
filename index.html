@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v2.3-debug</div>
+  <div id="version">v2.4-debug</div>
 
   <div id="status"></div>
 
@@ -537,29 +537,45 @@
     }
 
     async function pollAndUpload(request_id) {
-      const statusUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}/status`;
       const resultUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}`;
       const deadline  = Date.now() + 5 * 60 * 1000;
       let pollCount   = 0;
 
       while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 4000));
+        pollCount++;
         try {
-          pollCount++;
-          const { status } = await xhrGet(statusUrl, { "Authorization": `Key ${FAL_API_KEY}` });
-          log("poll #" + pollCount + ": " + status);
+          const xhr = new XMLHttpRequest();
+          const result = await new Promise((resolve, reject) => {
+            xhr.open("GET", resultUrl);
+            xhr.setRequestHeader("Authorization", `Key ${FAL_API_KEY}`);
+            xhr.timeout = 10000;
+            xhr.ontimeout = () => reject(new Error("timeout"));
+            xhr.onerror   = () => reject(new Error("network"));
+            xhr.onload    = () => resolve({ status: xhr.status, body: xhr.responseText });
+            xhr.send();
+          });
 
-          if (status === "COMPLETED") {
-            const data = await xhrGet(resultUrl, { "Authorization": `Key ${FAL_API_KEY}` });
-            log("KI fertig, lade zu Cloudinary hoch…");
-            await uploadResultToCloudinary(data.images[0].url);
-            log("✅ Cloudinary result upload OK");
+          log("poll #" + pollCount + " → HTTP " + result.status);
+
+          if (result.status === 200) {
+            const data = JSON.parse(result.body);
+            if (data.images && data.images[0]) {
+              log("KI fertig! Upload zu Cloudinary…");
+              await uploadResultToCloudinary(data.images[0].url);
+              log("✅ fertig!");
+              return;
+            }
+            // Status-Infos loggen falls kein Bild
+            log("body: " + result.body.slice(0, 150));
+          } else if (result.status === 400 || result.status === 500) {
+            log("FEHLER vom Server: " + result.body.slice(0, 150));
             return;
           }
-          if (status === "FAILED") { log("fal.ai FAILED"); return; }
-        } catch (e) { log("poll error: " + e.message); }
+          // 202 = noch nicht fertig, weiter pollen
+        } catch (e) { log("poll #" + pollCount + " error: " + e.message); }
       }
-      log("poll timeout");
+      log("poll timeout nach 5min");
     }
   </script>
 </body>
