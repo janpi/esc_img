@@ -129,7 +129,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.2</div>
+  <div id="version">v1.3</div>
 
   <div id="status"></div>
 
@@ -307,24 +307,7 @@
     // "Nochmal" → zurück
     btnRetry.addEventListener("click", showShootScreen);
 
-    // base64 → Cloudinary (temporär) → URL zurückgeben
-    async function uploadOriginalToCloudinary(base64Image) {
-      const form = new FormData();
-      form.append("file", base64Image);
-      form.append("upload_preset", CLOUDINARY_PRESET);
-      form.append("folder", "party-photobooth-originals");
-      form.append("tags", "original");
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
-        { method: "POST", body: form }
-      );
-      if (!response.ok) throw new Error(`Cloudinary Upload Fehler: ${response.status}`);
-      const data = await response.json();
-      return data.secure_url;
-    }
-
-    // Bild-URL → FLUX Kontext Pro → KI-Bild URL
+    // base64 oder URL → FLUX Kontext Pro → KI-Bild URL
     async function generateOutfit(imageUrl) {
       const payload = {
         prompt: pickPrompt(),
@@ -399,20 +382,17 @@
       processPhoto(resized);
     }
 
-    // Haupt-Flow: Foto → Upload Original → KI → Upload Ergebnis
+    // Haupt-Flow: Foto → KI → Upload Ergebnis
     async function processPhoto(dataUrl) {
       btnShoot.style.display = "none";
       waiting.style.display  = "flex";
       startTimer();
 
       try {
-        setStep("Foto wird hochgeladen… (1/3)");
-        const originalUrl = await uploadOriginalToCloudinary(dataUrl);
+        setStep("KI erstellt deinen ESC-Look… (1/2)");
+        const aiImageUrl = await generateOutfit(dataUrl);
 
-        setStep("KI erstellt deinen ESC-Look… (2/3)");
-        const aiImageUrl = await generateOutfit(originalUrl);
-
-        setStep("Ergebnis wird gespeichert… (3/3)");
+        setStep("Ergebnis wird gespeichert… (2/2)");
         await uploadResultToCloudinary(aiImageUrl);
 
         stopTimer();
