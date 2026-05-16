@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.8-debug</div>
+  <div id="version">v1.9-debug</div>
 
   <div id="status"></div>
 
@@ -299,30 +299,6 @@
     btnRetry.addEventListener("click", showShootScreen);
 
     // dataUrl → Blob → Cloudinary → sichere URL zurückgeben
-    async function uploadOriginalToCloudinary(dataUrl) {
-      log("blob konvertieren…");
-      const blob = await fetch(dataUrl).then(r => r.blob());
-      log("blob OK, size: " + blob.size + " bytes, type: " + blob.type);
-
-      const form = new FormData();
-      form.append("file", blob, "photo.jpg");
-      form.append("upload_preset", CLOUDINARY_PRESET);
-      form.append("folder", "party-photobooth");
-      form.append("tags", "original,songcontest");
-
-      log("Cloudinary fetch starten…");
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
-        { method: "POST", body: form }
-      );
-      log("Cloudinary response: " + response.status);
-      if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Cloudinary ${response.status}: ${err.slice(0, 200)}`);
-      }
-      const data = await response.json();
-      return data.secure_url;
-    }
 
     // URL → fal.ai Queue → KI-Bild URL (polling statt langer Einzelrequest)
     async function generateOutfit(imageUrl) {
@@ -425,17 +401,12 @@
       startTimer();
 
       try {
-        setStep("1) Resize fertig, starte Upload…");
-        log("processPhoto: starte uploadOriginalToCloudinary");
-        const originalUrl = await uploadOriginalToCloudinary(dataUrl);
-        log("Upload OK: " + originalUrl);
-
-        setStep("2) Upload OK, sende an KI…");
-        log("submitOutfitJob starten");
-        await submitOutfitJob(originalUrl);
+        setStep("1) Sende an KI…");
+        log("submitOutfitJob starten, dataUrl length: " + dataUrl.length);
+        await submitOutfitJob(dataUrl);
         log("submitOutfitJob OK");
 
-        setStep("3) Job eingereicht ✨ Gleich fertig…");
+        setStep("2) Job eingereicht ✨ Gleich fertig…");
         await new Promise(r => setTimeout(r, 4000));
 
         stopTimer();
