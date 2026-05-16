@@ -129,7 +129,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.4</div>
+  <div id="version">v1.5</div>
 
   <div id="status"></div>
 
@@ -166,13 +166,14 @@
       }
 
       const outfitBase = [
-        "a dramatic full-length sequinned gown",
-        "a sparkling bodysuit with a billowing skirt",
         "an extravagant tailored jumpsuit",
-        "a bold structured mini dress",
-        "a glittering oversized blazer and matching shorts",
-        "a lavish floor-length cape over a sleek catsuit",
-        "a voluminous ballgown with a structured bodice",
+        "a glittering oversized blazer with matching wide-leg trousers",
+        "a lavish floor-length cape over a sleek fitted outfit",
+        "a spectacular sequinned stage suit with dramatic lapels",
+        "a bold structured performance outfit with architectural shoulders",
+        "a dazzling rhinestone-encrusted suit",
+        "a striking metallic two-piece stage costume",
+        "an opulent velvet tailcoat with embellished trousers",
       ];
 
       const colorPalette = [
@@ -326,7 +327,7 @@
       return data.secure_url;
     }
 
-    // URL → FLUX Kontext Pro → KI-Bild URL
+    // URL → fal.ai Queue → KI-Bild URL (polling statt langer Einzelrequest)
     async function generateOutfit(imageUrl) {
       const payload = {
         prompt: pickPrompt(),
@@ -339,29 +340,48 @@
         aspect_ratio: "3:4"
       };
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000); // 2 min Timeout
+      // Job einreichen
+      const submitRes = await fetch("https://queue.fal.run/fal-ai/flux-pro/kontext", {
+        method: "POST",
+        headers: {
+          "Authorization": `Key ${FAL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!submitRes.ok) {
+        const err = await submitRes.text();
+        throw new Error(`fal.ai Submit Fehler: ${submitRes.status} – ${err}`);
+      }
+      const { request_id } = await submitRes.json();
 
-      let response;
-      try {
-        response = await fetch("https://fal.run/fal-ai/flux-pro/kontext", {
-          method: "POST",
-          headers: {
-            "Authorization": `Key ${FAL_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
+      // Ergebnis pollen (alle 3 Sekunden, max. 5 Minuten)
+      const statusUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}/status`;
+      const resultUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}`;
+      const deadline  = Date.now() + 5 * 60 * 1000;
+
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 3000));
+
+        const statusRes = await fetch(statusUrl, {
+          headers: { "Authorization": `Key ${FAL_API_KEY}` }
         });
-      } finally {
-        clearTimeout(timeout);
+        if (!statusRes.ok) continue;
+        const { status } = await statusRes.json();
+
+        if (status === "COMPLETED") {
+          const resultRes = await fetch(resultUrl, {
+            headers: { "Authorization": `Key ${FAL_API_KEY}` }
+          });
+          if (!resultRes.ok) throw new Error("fal.ai Ergebnis konnte nicht geladen werden");
+          const data = await resultRes.json();
+          return data.images[0].url;
+        }
+        if (status === "FAILED") {
+          throw new Error("fal.ai: Bildgenerierung fehlgeschlagen");
+        }
       }
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`fal.ai Fehler: ${response.status} – ${errText}`);
-      }
-      const data = await response.json();
-      return data.images[0].url;
+      throw new Error("fal.ai: Timeout nach 5 Minuten");
     }
 
     // AI-Ergebnis-URL → Cloudinary hochladen (URL direkt übergeben)
