@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v2.4-debug</div>
+  <div id="version">v2.5-debug</div>
 
   <div id="status"></div>
 
@@ -332,11 +332,11 @@
 
           const xhr = new XMLHttpRequest();
           xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
-          xhr.timeout = 30000;
+          xhr.timeout = 90000;
           xhr.upload.onprogress = e => {
             if (e.lengthComputable) log("upload: " + Math.round(e.loaded/e.total*100) + "%");
           };
-          xhr.ontimeout = () => reject(new Error("Cloudinary timeout"));
+          xhr.ontimeout = () => reject(new Error("Cloudinary timeout (90s)"));
           xhr.onerror   = () => reject(new Error("Cloudinary Netzwerkfehler"));
           xhr.onload    = () => {
             log("Cloudinary status: " + xhr.status);
