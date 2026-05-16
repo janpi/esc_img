@@ -102,9 +102,10 @@
 
   <!-- ─── KONFIGURATION ──────────────────────────────────────────────── -->
   <script>
-    const CLOUDINARY_CLOUD = "djwn28ean";
-    const SLIDE_DURATION   = 10000;  // Millisekunden pro Bild
-    const POLL_INTERVAL    = 5000;   // Wie oft nach neuen Bildern suchen
+    const CLOUDINARY_CLOUD    = "djwn28ean";
+    const SLIDE_DURATION      = 10000;  // Millisekunden pro Bild (normale Slideshow)
+    const NEW_PHOTO_DURATION  = 20000;  // Millisekunden für ein neues Foto (Spotlight)
+    const POLL_INTERVAL       = 5000;   // Wie oft nach neuen Bildern suchen
   </script>
   <!-- ──────────────────────────────────────────────────────────────────── -->
 
@@ -134,25 +135,39 @@
     const progress = document.getElementById("progress");
     const empty    = document.getElementById("empty");
 
-    let images       = [];
-    let currentIndex = 0;
-    let activeSlide  = "a";
-    let slideTimer   = null;
+    let allImages      = [];       // alle bekannten Bild-URLs
+    let knownIds       = new Set();// bereits gesehene public_ids
+    let playlist       = [];       // shuffled Indizes für aktuellen Durchgang
+    let playlistPos    = 0;
+    let activeSlide    = "a";
+    let slideTimer     = null;
+    let spotlightQueue = [];       // neue Fotos warten auf Spotlight-Anzeige
+    let inSpotlight    = false;
+
+    // ── Fisher-Yates Shuffle ────────────────────────────────────────────
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // Gibt die nächste URL aus dem shuffled Playlist zurück.
+    // Am Ende jedes Durchgangs wird neu gemischt.
+    function nextPlaylistUrl() {
+      if (allImages.length === 0) return null;
+      if (playlistPos >= playlist.length) {
+        playlist    = shuffle(allImages.map((_, i) => i));
+        playlistPos = 0;
+      }
+      return allImages[playlist[playlistPos++]];
+    }
 
     // ── Cloudinary Bildliste laden ──────────────────────────────────────
-    // Wir laden einfach die letzte bekannte Bild-ID aus localStorage und
-    // fragen Cloudinary per Search API nach allen Bildern im Ordner.
-    // Die Search API braucht einen API Key – stattdessen nutzen wir einen
-    // einfachen Trick: wir speichern jede hochgeladene URL in localStorage
-    // (geschrieben von index.html via BroadcastChannel / localStorage).
-    // Fallback: Cloudinary "named transformations list" via tag-basierter URL.
-
     async function fetchImages() {
       try {
-        // Cloudinary unterstützt tag-basierte Bildlisten ohne Auth:
-        // https://res.cloudinary.com/<cloud>/image/list/<tag>.json
-        // Voraussetzung: in Cloudinary Settings → Security →
-        // "Resource list" muss aktiviert sein (einmalig, gratis).
         const response = await fetch(
           `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/list/songcontest.json?t=${Date.now()}`,
           { cache: "no-store" }
@@ -163,22 +178,35 @@
         }
         const data = await response.json();
 
-        const urls = (data.resources || [])
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-          .map(r => `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/q_auto,f_auto,w_1920/${r.public_id}`);
+        const resources = (data.resources || [])
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        const hadImages = images.length > 0;
-        const newCount  = urls.length;
+        const wasEmpty = allImages.length === 0;
+        const newUrls  = [];
 
-        if (newCount > images.length) {
-          const newUrls = urls.slice(0, newCount - images.length);
-          images = [...newUrls, ...images];
+        for (const r of resources) {
+          if (!knownIds.has(r.public_id)) {
+            knownIds.add(r.public_id);
+            const url = `https://res.cloudinary.com/${CLOUDINARY_CLOUD}/image/upload/q_auto,f_auto,w_1920/${r.public_id}`;
+            allImages.push(url);
+            newUrls.push(url);
+          }
         }
 
-        if (images.length > 0 && !hadImages) {
+        if (newUrls.length === 0) return;
+
+        // Neue Fotos in die Spotlight-Warteschlange einreihen
+        spotlightQueue.push(...newUrls);
+
+        if (wasEmpty) {
           empty.style.display = "none";
-          startSlideshow();
+          runNext();
+        } else if (!inSpotlight) {
+          // Laufende Slideshow unterbrechen und neues Foto zeigen
+          clearTimeout(slideTimer);
+          runNext();
         }
+        // Wenn bereits im Spotlight-Modus läuft, wird die Queue automatisch abgearbeitet
       } catch (e) {
         console.warn("Fetch-Fehler:", e);
       }
@@ -198,25 +226,31 @@
       activeSlide = activeSlide === "a" ? "b" : "a";
     }
 
-    function animateProgress() {
+    function animateProgress(duration) {
       progress.style.transition = "none";
       progress.style.width = "0%";
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        progress.style.transition = `width ${SLIDE_DURATION}ms linear`;
+        progress.style.transition = `width ${duration}ms linear`;
         progress.style.width = "100%";
       }));
     }
 
-    function nextSlide() {
-      if (images.length === 0) return;
-      showSlide(images[currentIndex]);
-      animateProgress();
-      currentIndex = (currentIndex + 1) % images.length;
-    }
-
-    function startSlideshow() {
-      nextSlide();
-      slideTimer = setInterval(nextSlide, SLIDE_DURATION);
+    // Zentrale Steuerung: Spotlight-Queue zuerst, dann normale Slideshow
+    function runNext() {
+      if (spotlightQueue.length > 0) {
+        inSpotlight = true;
+        const url = spotlightQueue.shift();
+        showSlide(url);
+        animateProgress(NEW_PHOTO_DURATION);
+        slideTimer = setTimeout(runNext, NEW_PHOTO_DURATION);
+      } else {
+        inSpotlight = false;
+        const url = nextPlaylistUrl();
+        if (!url) return;
+        showSlide(url);
+        animateProgress(SLIDE_DURATION);
+        slideTimer = setTimeout(runNext, SLIDE_DURATION);
+      }
     }
 
     // ── Init ────────────────────────────────────────────────────────────

@@ -45,6 +45,15 @@
       display: none;
     }
 
+    #result-img {
+      display: none;
+      width: 100%;
+      max-width: 420px;
+      border-radius: 16px;
+      margin-top: 20px;
+      box-shadow: 0 0 40px rgba(255, 110, 199, 0.35);
+    }
+
     #status {
       margin-top: 14px;
       text-align: center;
@@ -110,7 +119,7 @@
     #version {
       margin-top: 12px;
       font-size: 0.72rem;
-      color: #333;
+      color: #666;
       letter-spacing: 0.05em;
     }
   </style>
@@ -120,7 +129,6 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <button class="btn" id="btn-retry">🔄 Nochmal</button>
   <div id="version">v1.0</div>
 
   <div id="status"></div>
@@ -137,6 +145,9 @@
     <h2>Vielen Dank, und willkommen beim ESC Wien 2026!</h2>
     <p>Dein Look erscheint gleich auf dem grossen Bildschirm.</p>
   </div>
+
+  <img id="result-img" alt="Dein ESC-Look">
+  <button class="btn" id="btn-retry">🔄 Nochmal</button>
 
   <script>
     // ─── KONFIGURATION ────────────────────────────────────────────────────────
@@ -219,9 +230,9 @@
       const bg       = pick(backgrounds);
 
       return (
-        `Leave the face of the person completely unchanged and realistic. ` +
+        `Leave the face, body, and gender of the person completely unchanged and realistic — keep men as men and women as women. ` +
         `Transform their clothing into ${outfit} ${color}, ${details}, ${accessory}. ` +
-        `The outfit should look like a spectacular Eurovision Song Contest stage costume. ` +
+        `The outfit should look like a spectacular Eurovision Song Contest stage costume suited to their gender. ` +
         `${bg}. ` +
         `No nudity, no see-through fabric, no exposed skin beyond what is tasteful.`
       );
@@ -234,6 +245,7 @@
     const status     = document.getElementById("status");
     const waiting    = document.getElementById("waiting");
     const thankyou   = document.getElementById("thankyou");
+    const resultImg  = document.getElementById("result-img");
 
     function setStatus(msg, loading = false) {
       status.innerHTML = loading
@@ -246,6 +258,8 @@
       btnRetry.style.display  = "none";
       waiting.style.display   = "none";
       thankyou.style.display  = "none";
+      resultImg.style.display = "none";
+      resultImg.src           = "";
       setStatus("");
     }
 
@@ -345,8 +359,11 @@
         const aiImageUrl = await generateOutfit(dataUrl);
         await uploadResultToCloudinary(aiImageUrl);
 
-        waiting.style.display  = "none";
-        thankyou.style.display = "flex";
+        waiting.style.display   = "none";
+        thankyou.style.display  = "flex";
+        resultImg.src           = aiImageUrl;
+        resultImg.style.display = "block";
+        btnRetry.style.display  = "block";
 
       } catch (e) {
         console.error(e);
