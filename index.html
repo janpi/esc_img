@@ -45,14 +45,6 @@
       display: none;
     }
 
-    #result-img {
-      display: none;
-      width: 100%;
-      max-width: 420px;
-      border-radius: 16px;
-      margin-top: 20px;
-      box-shadow: 0 0 40px rgba(255, 110, 199, 0.35);
-    }
 
     #status {
       margin-top: 14px;
@@ -129,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.5</div>
+  <div id="version">v1.6</div>
 
   <div id="status"></div>
 
@@ -147,7 +139,6 @@
     <p>Dein Look erscheint gleich auf dem grossen Bildschirm.</p>
   </div>
 
-  <img id="result-img" alt="Dein ESC-Look">
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
 
   <script>
@@ -249,7 +240,6 @@
     const waitingStep  = document.getElementById("waiting-step");
     const waitingTimer = document.getElementById("waiting-timer");
     const thankyou     = document.getElementById("thankyou");
-    const resultImg    = document.getElementById("result-img");
 
     let timerInterval = null;
 
@@ -284,8 +274,6 @@
       btnRetry.style.display  = "none";
       waiting.style.display   = "none";
       thankyou.style.display  = "none";
-      resultImg.style.display = "none";
-      resultImg.src           = "";
       setStatus("");
     }
 
@@ -421,28 +409,23 @@
       processPhoto(resized);
     }
 
-    // Haupt-Flow: Foto → Cloudinary Upload → KI → Upload Ergebnis
+    // Haupt-Flow: Foto hochladen → KI-Job einreichen → sofort Danke zeigen
     async function processPhoto(dataUrl) {
       btnShoot.style.display = "none";
       waiting.style.display  = "flex";
       startTimer();
 
       try {
-        setStep("Foto wird hochgeladen… (1/3)");
+        setStep("Foto wird hochgeladen…");
         const originalUrl = await uploadOriginalToCloudinary(dataUrl);
 
-        setStep("KI erstellt deinen ESC-Look… (2/3)");
-        const aiImageUrl = await generateOutfit(originalUrl);
-
-        setStep("Ergebnis wird gespeichert… (3/3)");
-        await uploadResultToCloudinary(aiImageUrl);
+        setStep("Wird an die KI übermittelt…");
+        await submitOutfitJob(originalUrl); // nur einreichen, nicht warten
 
         stopTimer();
-        waiting.style.display   = "none";
-        thankyou.style.display  = "flex";
-        resultImg.src           = aiImageUrl;
-        resultImg.style.display = "block";
-        btnRetry.style.display  = "block";
+        waiting.style.display  = "none";
+        thankyou.style.display = "flex";
+        btnRetry.style.display = "block";
 
       } catch (e) {
         stopTimer();
@@ -451,6 +434,65 @@
         setStatus("❌ Fehler: " + e.message);
         btnShoot.style.display = "block";
         btnRetry.style.display = "block";
+      }
+    }
+
+    // Job einreichen und Ergebnis im Hintergrund zu Cloudinary hochladen
+    async function submitOutfitJob(imageUrl) {
+      const payload = {
+        prompt: pickPrompt(),
+        image_url: imageUrl,
+        guidance_scale: 3.5,
+        num_images: 1,
+        output_format: "jpeg",
+        safety_tolerance: "6",
+        enhance_prompt: false,
+        aspect_ratio: "3:4"
+      };
+
+      const submitRes = await fetch("https://queue.fal.run/fal-ai/flux-pro/kontext", {
+        method: "POST",
+        headers: {
+          "Authorization": `Key ${FAL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!submitRes.ok) {
+        const err = await submitRes.text();
+        throw new Error(`fal.ai Submit Fehler: ${submitRes.status} – ${err}`);
+      }
+      const { request_id } = await submitRes.json();
+
+      // Hintergrund-Polling: Ergebnis zu Cloudinary hochladen wenn fertig
+      pollAndUpload(request_id);
+    }
+
+    async function pollAndUpload(request_id) {
+      const statusUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}/status`;
+      const resultUrl = `https://queue.fal.run/fal-ai/flux-pro/kontext/requests/${request_id}`;
+      const deadline  = Date.now() + 5 * 60 * 1000;
+
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const statusRes = await fetch(statusUrl, {
+            headers: { "Authorization": `Key ${FAL_API_KEY}` }
+          });
+          if (!statusRes.ok) continue;
+          const { status } = await statusRes.json();
+
+          if (status === "COMPLETED") {
+            const resultRes = await fetch(resultUrl, {
+              headers: { "Authorization": `Key ${FAL_API_KEY}` }
+            });
+            if (!resultRes.ok) return;
+            const data = await resultRes.json();
+            await uploadResultToCloudinary(data.images[0].url);
+            return;
+          }
+          if (status === "FAILED") return;
+        } catch { /* im Hintergrund, Fehler ignorieren */ }
       }
     }
   </script>
