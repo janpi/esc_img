@@ -19,8 +19,8 @@
       padding: 20px;
     }
 
-    #camera-wrap {
-      position: relative;
+    #preview-wrap {
+      display: none;
       width: 100%;
       max-width: 420px;
       border-radius: 16px;
@@ -29,35 +29,12 @@
       aspect-ratio: 3/4;
     }
 
-    video {
+    #preview-img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
     }
-
-    canvas { display: none; }
-
-    #btn-flip {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      border: none;
-      background: rgba(0,0,0,0.45);
-      color: #fff;
-      font-size: 1.3rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(4px);
-      transition: background 0.2s;
-      z-index: 5;
-    }
-    #btn-flip:active { background: rgba(0,0,0,0.7); }
 
     .btn {
       margin-top: 18px;
@@ -77,6 +54,12 @@
     #btn-shoot {
       background: linear-gradient(135deg, #ff6ec7, #ffe066);
       color: #000;
+    }
+
+    #btn-go {
+      background: linear-gradient(135deg, #6ec6ff, #ff6ec7);
+      color: #000;
+      display: none;
     }
 
     #btn-retry {
@@ -150,13 +133,14 @@
 </head>
 <body>
 
-  <div id="camera-wrap">
-    <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-    <button id="btn-flip" title="Kamera wechseln">🔄</button>
+  <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
+
+  <div id="preview-wrap">
+    <img id="preview-img" alt="Dein Foto">
   </div>
 
-  <button class="btn" id="btn-shoot">🎤 Mach mich Song Contest!</button>
+  <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
+  <button class="btn" id="btn-go">✨ Mach mich Song Contest!</button>
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
 
   <div id="status"></div>
@@ -181,40 +165,100 @@
     const CLOUDINARY_PRESET  = "esc_img_upload";       // Cloudinary → Settings → Upload Presets (unsigned)
     // ─────────────────────────────────────────────────────────────────────────
 
-    const PROMPT = "Leave the face of the persons unchanged, but change the clothes of the persons to a funny, vibrant, glittery Eurovision Song Contest outfit. Leave the scene and background as it is, but add some disco lights.";
-
-    const video      = document.getElementById("video");
-    const canvas     = document.getElementById("canvas");
-    const cameraWrap = document.getElementById("camera-wrap");
-    const btnShoot   = document.getElementById("btn-shoot");
-    const btnRetry   = document.getElementById("btn-retry");
-    const btnFlip    = document.getElementById("btn-flip");
-    const status     = document.getElementById("status");
-    const waiting    = document.getElementById("waiting");
-    const thankyou   = document.getElementById("thankyou");
-
-    let facingMode = "user";
-
-    async function startCamera() {
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(t => t.stop());
+    // ─── RANDOM PROMPT BUILDER ────────────────────────────────────────────────
+    function pickPrompt() {
+      function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+      function pickN(arr, n) {
+        const shuffled = [...arr].sort(() => Math.random() - 0.5);
+        return shuffled.slice(0, n);
       }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode, width: { ideal: 1080 }, height: { ideal: 1440 } },
-          audio: false
-        });
-        video.srcObject = stream;
-      } catch (e) {
-        setStatus("❌ Kamera-Zugriff verweigert. Bitte erlauben und neu laden.");
-        btnShoot.disabled = true;
-      }
+
+      const outfitBase = [
+        "a dramatic full-length sequinned gown",
+        "a sparkling bodysuit with a billowing skirt",
+        "an extravagant tailored jumpsuit",
+        "a bold structured mini dress",
+        "a glittering oversized blazer and matching shorts",
+        "a lavish floor-length cape over a sleek catsuit",
+        "a voluminous ballgown with a structured bodice",
+      ];
+
+      const colorPalette = [
+        "in electric blue and silver",
+        "in hot pink and gold",
+        "in deep purple and iridescent white",
+        "in neon green and chrome",
+        "in scarlet red and black glitter",
+        "in rainbow gradient hues",
+        "in rose gold and champagne",
+        "in cobalt blue and blinding gold",
+        "in midnight black covered in rhinestones",
+        "in acid yellow and fuchsia",
+      ];
+
+      const embellishments = [
+        "covered in thousands of tiny rhinestones",
+        "adorned with large pink ostrich feathers along the hem and collar",
+        "decorated with oversized iridescent sequins",
+        "trimmed with white marabou feathers",
+        "encrusted with mirror tiles that catch the light",
+        "layered with holographic fringe",
+        "studded with pearl and crystal clusters",
+        "draped with metallic chain details",
+        "covered in hand-sewn paillettes that shimmer with every move",
+        "embroidered with colourful crystal flowers",
+      ];
+
+      const accessories = [
+        "topped with a towering feathered headdress",
+        "paired with dramatic opera gloves",
+        "finished with a sweeping feather boa",
+        "completed by an oversized rhinestone tiara",
+        "accented with enormous statement earrings",
+        "paired with thigh-high metallic boots",
+        "finished with a shimmering cape flowing to the floor",
+      ];
+
+      const backgrounds = [
+        "Replace the background with a pure abstract swirl of soft purple and pink light haze, no objects, no people",
+        "Replace the background with deep darkness and sweeping multicolored spotlights fanning outward, no objects, no people",
+        "Replace the background with a rich navy-to-black gradient washed in warm golden light beams, no objects, no people",
+        "Replace the background with an electric blue and violet light-wash gradient, no objects, no people",
+        "Replace the background with a moody dark background with soft neon pink and cyan light glows bleeding in from the sides, no objects, no people",
+        "Replace the background with a shimmering silver-to-black gradient with subtle bokeh light circles, no objects, no people",
+        "Replace the background with a deep magenta and amber colour-wash fading to black, no objects, no people",
+        "Replace the background with a dark background pierced by thin, soft laser-like beams of white and gold light, no objects, no people",
+        "Replace the background with a hazy teal and indigo gradient lit by unseen coloured stage lights, no objects, no people",
+        "Replace the background with a velvety dark background with slowly radiating soft rainbow light rings, no objects, no people",
+      ];
+
+      const outfit   = pick(outfitBase);
+      const color    = pick(colorPalette);
+      const details  = pickN(embellishments, 2).join(" and ");
+      const accessory = pick(accessories);
+      const bg       = pick(backgrounds);
+
+      return (
+        `Leave the face of the person completely unchanged and realistic. ` +
+        `Transform their clothing into ${outfit} ${color}, ${details}, ${accessory}. ` +
+        `The outfit should look like a spectacular Eurovision Song Contest stage costume. ` +
+        `${bg}. ` +
+        `No nudity, no see-through fabric, no exposed skin beyond what is tasteful.`
+      );
     }
+    // ─────────────────────────────────────────────────────────────────────────
 
-    btnFlip.addEventListener("click", () => {
-      facingMode = facingMode === "user" ? "environment" : "user";
-      startCamera();
-    });
+    const photoInput  = document.getElementById("photo-input");
+    const previewWrap = document.getElementById("preview-wrap");
+    const previewImg  = document.getElementById("preview-img");
+    const btnShoot    = document.getElementById("btn-shoot");
+    const btnGo       = document.getElementById("btn-go");
+    const btnRetry    = document.getElementById("btn-retry");
+    const status      = document.getElementById("status");
+    const waiting     = document.getElementById("waiting");
+    const thankyou    = document.getElementById("thankyou");
+
+    let capturedDataUrl = null;
 
     function setStatus(msg, loading = false) {
       status.innerHTML = loading
@@ -222,17 +266,47 @@
         : msg;
     }
 
-    function capturePhoto() {
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext("2d").drawImage(video, 0, 0);
-      return canvas.toDataURL("image/jpeg", 0.85);
+    function showShootScreen() {
+      previewWrap.style.display = "none";
+      btnShoot.style.display   = "block";
+      btnGo.style.display      = "none";
+      btnRetry.style.display   = "none";
+      waiting.style.display    = "none";
+      thankyou.style.display   = "none";
+      setStatus("");
+      capturedDataUrl = null;
     }
+
+    // "Foto aufnehmen" → öffnet native Kamera-App
+    btnShoot.addEventListener("click", () => {
+      photoInput.value = "";
+      photoInput.click();
+    });
+
+    // Foto wurde aufgenommen → Vorschau zeigen
+    photoInput.addEventListener("change", () => {
+      const file = photoInput.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        capturedDataUrl = e.target.result;
+        previewImg.src = capturedDataUrl;
+        previewWrap.style.display = "block";
+        btnShoot.style.display    = "none";
+        btnGo.style.display       = "block";
+        btnRetry.style.display    = "block";
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // "Nochmal" → zurück zur Kamera
+    btnRetry.addEventListener("click", showShootScreen);
 
     // base64 → FLUX Kontext Pro → KI-Bild URL
     async function generateOutfit(base64Image) {
       const payload = {
-        prompt: PROMPT,
+        prompt: pickPrompt(),
         image_url: base64Image,
         guidance_scale: 3.5,
         num_images: 1,
@@ -258,7 +332,7 @@
       return data.images[0].url;
     }
 
-    // AI-Ergebnis-URL → Cloudinary hochladen (mit Slideshow-Tags)
+    // AI-Ergebnis-URL → Cloudinary hochladen
     async function uploadResultToCloudinary(imageUrl) {
       const imgBlob = await fetch(imageUrl).then(r => r.blob());
 
@@ -275,49 +349,36 @@
       if (!response.ok) throw new Error(`Cloudinary Fehler: ${response.status}`);
     }
 
-    // Haupt-Flow
-    btnShoot.addEventListener("click", async () => {
-      btnShoot.disabled = true;
-      btnRetry.style.display = "none";
-      thankyou.style.display = "none";
+    // Haupt-Flow: Foto bestätigen → KI → Upload
+    btnGo.addEventListener("click", async () => {
+      if (!capturedDataUrl) return;
+      btnGo.disabled    = true;
+      btnRetry.disabled = true;
 
       try {
-        // 1. Foto machen, Kamera ausblenden
-        const base64 = capturePhoto();
-        cameraWrap.style.display = "none";
-        btnShoot.style.display = "none";
-        waiting.style.display = "flex";
+        previewWrap.style.display = "none";
+        btnGo.style.display       = "none";
+        btnRetry.style.display    = "none";
+        waiting.style.display     = "flex";
 
-        // 2. KI + Upload abwarten
-        const aiImageUrl = await generateOutfit(base64);
+        const aiImageUrl = await generateOutfit(capturedDataUrl);
         await uploadResultToCloudinary(aiImageUrl);
 
-        // 3. Danke-Screen zeigen
-        waiting.style.display = "none";
+        waiting.style.display  = "none";
         thankyou.style.display = "flex";
 
       } catch (e) {
         console.error(e);
         waiting.style.display = "none";
         setStatus("❌ Fehler: " + e.message);
-        cameraWrap.style.display = "block";
-        btnShoot.style.display = "block";
-        btnRetry.style.display = "block";
+        previewWrap.style.display = "block";
+        btnGo.style.display       = "block";
+        btnRetry.style.display    = "block";
       } finally {
-        btnShoot.disabled = false;
+        btnGo.disabled    = false;
+        btnRetry.disabled = false;
       }
     });
-
-    btnRetry.addEventListener("click", () => {
-      cameraWrap.style.display = "block";
-      btnShoot.style.display = "block";
-      btnRetry.style.display = "none";
-      waiting.style.display = "none";
-      thankyou.style.display = "none";
-      setStatus("");
-    });
-
-    startCamera();
   </script>
 </body>
 </html>
