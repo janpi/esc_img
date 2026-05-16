@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v2.5-debug</div>
+  <div id="version">v2.6-debug</div>
 
   <div id="status"></div>
 
@@ -328,7 +328,7 @@
           form.append("file", blob, "photo.jpg");
           form.append("upload_preset", CLOUDINARY_PRESET);
           form.append("folder", "party-photobooth");
-          form.append("tags", "original,songcontest");
+          form.append("tags", "original");
 
           const xhr = new XMLHttpRequest();
           xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
