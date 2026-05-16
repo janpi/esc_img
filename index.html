@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.7</div>
+  <div id="version">v1.8-debug</div>
 
   <div id="status"></div>
 
@@ -141,6 +141,7 @@
   </div>
 
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
+  <pre id="debug-log" style="margin-top:16px;font-size:0.7rem;color:#888;white-space:pre-wrap;width:100%;max-width:420px;word-break:break-all;"></pre>
 
   <script>
     // ─── KONFIGURATION ────────────────────────────────────────────────────────
@@ -299,7 +300,9 @@
 
     // dataUrl → Blob → Cloudinary → sichere URL zurückgeben
     async function uploadOriginalToCloudinary(dataUrl) {
-      const blob = await fetch(dataUrl).then(r => r.blob()); // lokal, kein Netzwerk
+      log("blob konvertieren…");
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      log("blob OK, size: " + blob.size + " bytes, type: " + blob.type);
 
       const form = new FormData();
       form.append("file", blob, "photo.jpg");
@@ -307,11 +310,16 @@
       form.append("folder", "party-photobooth");
       form.append("tags", "original,songcontest");
 
+      log("Cloudinary fetch starten…");
       const response = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
         { method: "POST", body: form }
       );
-      if (!response.ok) throw new Error(`Cloudinary Upload Fehler: ${response.status}`);
+      log("Cloudinary response: " + response.status);
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Cloudinary ${response.status}: ${err.slice(0, 200)}`);
+      }
       const data = await response.json();
       return data.secure_url;
     }
@@ -417,14 +425,18 @@
       startTimer();
 
       try {
-        setStep("Foto wird hochgeladen…");
+        setStep("1) Resize fertig, starte Upload…");
+        log("processPhoto: starte uploadOriginalToCloudinary");
         const originalUrl = await uploadOriginalToCloudinary(dataUrl);
+        log("Upload OK: " + originalUrl);
 
-        setStep("Wird an die KI übermittelt…");
+        setStep("2) Upload OK, sende an KI…");
+        log("submitOutfitJob starten");
         await submitOutfitJob(originalUrl);
+        log("submitOutfitJob OK");
 
-        setStep("Dein Look wird kreiert – gleich fertig! ✨");
-        await new Promise(r => setTimeout(r, 4000)); // kurz anzeigen lassen
+        setStep("3) Job eingereicht ✨ Gleich fertig…");
+        await new Promise(r => setTimeout(r, 4000));
 
         stopTimer();
         waiting.style.display  = "none";
@@ -433,12 +445,19 @@
 
       } catch (e) {
         stopTimer();
-        console.error(e);
+        log("FEHLER: " + e.message);
         waiting.style.display = "none";
-        setStatus("❌ Fehler: " + e.message);
+        setStatus("❌ " + e.message);
         btnShoot.style.display = "block";
         btnRetry.style.display = "block";
       }
+    }
+
+    // Einfaches On-Screen-Log für Mobile-Debugging
+    function log(msg) {
+      console.log(msg);
+      const el = document.getElementById("debug-log");
+      if (el) el.textContent += "\n" + msg;
     }
 
     // Job einreichen und Ergebnis im Hintergrund zu Cloudinary hochladen
@@ -454,6 +473,7 @@
         aspect_ratio: "3:4"
       };
 
+      log("fal.ai fetch starten");
       const submitRes = await fetch("https://queue.fal.run/fal-ai/flux-pro/kontext", {
         method: "POST",
         headers: {
@@ -462,11 +482,13 @@
         },
         body: JSON.stringify(payload)
       });
+      log("fal.ai response status: " + submitRes.status);
       if (!submitRes.ok) {
         const err = await submitRes.text();
-        throw new Error(`fal.ai Submit Fehler: ${submitRes.status} – ${err}`);
+        throw new Error(`fal.ai Submit ${submitRes.status}: ${err}`);
       }
       const { request_id } = await submitRes.json();
+      log("request_id: " + request_id);
 
       // Hintergrund-Polling: Ergebnis zu Cloudinary hochladen wenn fertig
       pollAndUpload(request_id);
