@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v2.1-debug</div>
+  <div id="version">v2.2-debug</div>
 
   <div id="status"></div>
 
@@ -318,21 +318,37 @@
       });
     }
 
-    // dataUrl → Binary-Blob → fal.ai Storage → URL (via XHR)
-    async function uploadToFalStorage(dataUrl) {
-      log("blob konvertieren…");
-      const blob = await fetch(dataUrl).then(r => r.blob());
-      log("blob OK: " + blob.size + "b, type: " + blob.type);
+    // dataUrl → Blob → Cloudinary (XHR multipart) → URL
+    function uploadToCloudinaryXHR(dataUrl) {
+      return new Promise((resolve, reject) => {
+        log("blob konvertieren…");
+        fetch(dataUrl).then(r => r.blob()).then(blob => {
+          log("blob OK: " + blob.size + "b");
+          const form = new FormData();
+          form.append("file", blob, "photo.jpg");
+          form.append("upload_preset", CLOUDINARY_PRESET);
+          form.append("folder", "party-photobooth");
+          form.append("tags", "original,songcontest");
 
-      log("fal.ai storage XHR starten…");
-      const data = await xhrPost(
-        "https://fal.run/files/upload",
-        { "Authorization": `Key ${FAL_API_KEY}`, "Content-Type": blob.type || "image/jpeg" },
-        blob,
-        30000
-      );
-      log("storage URL: " + data.url);
-      return data.url;
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`);
+          xhr.timeout = 30000;
+          xhr.upload.onprogress = e => {
+            if (e.lengthComputable) log("upload: " + Math.round(e.loaded/e.total*100) + "%");
+          };
+          xhr.ontimeout = () => reject(new Error("Cloudinary timeout"));
+          xhr.onerror   = () => reject(new Error("Cloudinary Netzwerkfehler"));
+          xhr.onload    = () => {
+            log("Cloudinary status: " + xhr.status);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText).secure_url);
+            } else {
+              reject(new Error("Cloudinary " + xhr.status + ": " + xhr.responseText.slice(0, 200)));
+            }
+          };
+          xhr.send(form);
+        }).catch(reject);
+      });
     }
 
     // URL → fal.ai Queue → KI-Bild URL (polling statt langer Einzelrequest)
@@ -437,7 +453,7 @@
 
       try {
         setStep("1) Foto wird hochgeladen…");
-        const imageUrl = await uploadToFalStorage(dataUrl);
+        const imageUrl = await uploadToCloudinaryXHR(dataUrl);
 
         setStep("2) Sende an KI…");
         log("submitOutfitJob starten");
