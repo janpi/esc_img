@@ -121,7 +121,7 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.9-debug</div>
+  <div id="version">v2.0-debug</div>
 
   <div id="status"></div>
 
@@ -298,7 +298,31 @@
     // "Nochmal" → zurück
     btnRetry.addEventListener("click", showShootScreen);
 
-    // dataUrl → Blob → Cloudinary → sichere URL zurückgeben
+    // dataUrl → Binary-Blob → fal.ai Storage → URL
+    async function uploadToFalStorage(dataUrl) {
+      log("blob konvertieren…");
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      log("blob OK: " + blob.size + " bytes");
+
+      log("fal.ai storage upload starten…");
+      const res = await fetch("https://fal.run/files/upload", {
+        method: "POST",
+        headers: {
+          "Authorization": `Key ${FAL_API_KEY}`,
+          "Content-Type": blob.type || "image/jpeg",
+          "Accept": "application/json"
+        },
+        body: blob
+      });
+      log("fal.ai storage response: " + res.status);
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`fal.ai Storage ${res.status}: ${err.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      log("storage URL: " + data.url);
+      return data.url;
+    }
 
     // URL → fal.ai Queue → KI-Bild URL (polling statt langer Einzelrequest)
     async function generateOutfit(imageUrl) {
@@ -401,12 +425,15 @@
       startTimer();
 
       try {
-        setStep("1) Sende an KI…");
-        log("submitOutfitJob starten, dataUrl length: " + dataUrl.length);
-        await submitOutfitJob(dataUrl);
+        setStep("1) Foto wird hochgeladen…");
+        const imageUrl = await uploadToFalStorage(dataUrl);
+
+        setStep("2) Sende an KI…");
+        log("submitOutfitJob starten");
+        await submitOutfitJob(imageUrl);
         log("submitOutfitJob OK");
 
-        setStep("2) Job eingereicht ✨ Gleich fertig…");
+        setStep("3) Job eingereicht ✨ Gleich fertig…");
         await new Promise(r => setTimeout(r, 4000));
 
         stopTimer();
