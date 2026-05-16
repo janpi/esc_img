@@ -121,7 +121,7 @@
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
   <button class="btn" id="btn-retry">🔄 Nochmal</button>
-  <div id="version">v3.0</div>
+  <div id="version">v3.1</div>
 
   <div id="status"></div>
 
@@ -298,12 +298,10 @@
       return data.images[0].url;
     }
 
-    // AI-Ergebnis-URL → Cloudinary hochladen
+    // AI-Ergebnis-URL → Cloudinary hochladen (URL direkt übergeben, kein CORS-Blob-Download)
     async function uploadResultToCloudinary(imageUrl) {
-      const imgBlob = await fetch(imageUrl).then(r => r.blob());
-
       const form = new FormData();
-      form.append("file", imgBlob);
+      form.append("file", imageUrl);
       form.append("upload_preset", CLOUDINARY_PRESET);
       form.append("folder", "party-photobooth");
       form.append("tags", "party,songcontest");
