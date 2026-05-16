@@ -129,14 +129,15 @@
   <input type="file" id="photo-input" accept="image/*" capture="user" style="display:none">
 
   <button class="btn" id="btn-shoot">📸 Foto aufnehmen</button>
-  <div id="version">v1.1</div>
+  <div id="version">v1.2</div>
 
   <div id="status"></div>
 
   <div id="waiting" class="esc-screen">
     <div class="esc-icon">✨</div>
     <h2>Einen Moment bitte…</h2>
-    <p><span class="spinner"></span>Dein ESC-Look wird kreiert</p>
+    <p><span class="spinner"></span><span id="waiting-step">Bild wird vorbereitet…</span></p>
+    <small id="waiting-timer"></small>
     <small>(Browser nicht schließen)</small>
   </div>
 
@@ -239,13 +240,36 @@
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    const photoInput = document.getElementById("photo-input");
-    const btnShoot   = document.getElementById("btn-shoot");
-    const btnRetry   = document.getElementById("btn-retry");
-    const status     = document.getElementById("status");
-    const waiting    = document.getElementById("waiting");
-    const thankyou   = document.getElementById("thankyou");
-    const resultImg  = document.getElementById("result-img");
+    const photoInput   = document.getElementById("photo-input");
+    const btnShoot     = document.getElementById("btn-shoot");
+    const btnRetry     = document.getElementById("btn-retry");
+    const status       = document.getElementById("status");
+    const waiting      = document.getElementById("waiting");
+    const waitingStep  = document.getElementById("waiting-step");
+    const waitingTimer = document.getElementById("waiting-timer");
+    const thankyou     = document.getElementById("thankyou");
+    const resultImg    = document.getElementById("result-img");
+
+    let timerInterval = null;
+
+    function startTimer() {
+      const start = Date.now();
+      waitingTimer.textContent = "";
+      timerInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - start) / 1000);
+        waitingTimer.textContent = `(${s}s)`;
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      waitingTimer.textContent = "";
+    }
+
+    function setStep(msg) {
+      waitingStep.textContent = msg;
+    }
 
     function setStatus(msg, loading = false) {
       status.innerHTML = loading
@@ -254,6 +278,7 @@
     }
 
     function showShootScreen() {
+      stopTimer();
       btnShoot.style.display  = "block";
       btnRetry.style.display  = "none";
       waiting.style.display   = "none";
@@ -282,11 +307,28 @@
     // "Nochmal" → zurück
     btnRetry.addEventListener("click", showShootScreen);
 
-    // base64 → FLUX Kontext Pro → KI-Bild URL
-    async function generateOutfit(base64Image) {
+    // base64 → Cloudinary (temporär) → URL zurückgeben
+    async function uploadOriginalToCloudinary(base64Image) {
+      const form = new FormData();
+      form.append("file", base64Image);
+      form.append("upload_preset", CLOUDINARY_PRESET);
+      form.append("folder", "party-photobooth-originals");
+      form.append("tags", "original");
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+        { method: "POST", body: form }
+      );
+      if (!response.ok) throw new Error(`Cloudinary Upload Fehler: ${response.status}`);
+      const data = await response.json();
+      return data.secure_url;
+    }
+
+    // Bild-URL → FLUX Kontext Pro → KI-Bild URL
+    async function generateOutfit(imageUrl) {
       const payload = {
         prompt: pickPrompt(),
-        image_url: base64Image,
+        image_url: imageUrl,
         guidance_scale: 3.5,
         num_images: 1,
         output_format: "jpeg",
@@ -320,7 +362,7 @@
       return data.images[0].url;
     }
 
-    // AI-Ergebnis-URL → Cloudinary hochladen (URL direkt übergeben, kein zweiter Download nötig)
+    // AI-Ergebnis-URL → Cloudinary hochladen (URL direkt übergeben)
     async function uploadResultToCloudinary(imageUrl) {
       const form = new FormData();
       form.append("file", imageUrl);
@@ -357,15 +399,23 @@
       processPhoto(resized);
     }
 
-    // Haupt-Flow: Foto → KI → Upload
+    // Haupt-Flow: Foto → Upload Original → KI → Upload Ergebnis
     async function processPhoto(dataUrl) {
       btnShoot.style.display = "none";
       waiting.style.display  = "flex";
+      startTimer();
 
       try {
-        const aiImageUrl = await generateOutfit(dataUrl);
+        setStep("Foto wird hochgeladen… (1/3)");
+        const originalUrl = await uploadOriginalToCloudinary(dataUrl);
+
+        setStep("KI erstellt deinen ESC-Look… (2/3)");
+        const aiImageUrl = await generateOutfit(originalUrl);
+
+        setStep("Ergebnis wird gespeichert… (3/3)");
         await uploadResultToCloudinary(aiImageUrl);
 
+        stopTimer();
         waiting.style.display   = "none";
         thankyou.style.display  = "flex";
         resultImg.src           = aiImageUrl;
@@ -373,6 +423,7 @@
         btnRetry.style.display  = "block";
 
       } catch (e) {
+        stopTimer();
         console.error(e);
         waiting.style.display = "none";
         setStatus("❌ Fehler: " + e.message);
