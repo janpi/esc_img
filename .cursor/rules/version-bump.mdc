@@ -1,0 +1,24 @@
+---
+description: Versionsnummer in index.html vor jedem git push inkrementieren
+alwaysApply: true
+---
+
+# Versionsnummer vor Push inkrementieren
+
+Bevor du `git push` ausführst, **muss** die Versionsnummer in `index.html` erhöht werden.
+
+## Vorgehen
+
+1. Aktuelle Version aus `<div id="version">vX.Y</div>` auslesen
+2. Patch-Version um 1 erhöhen (z.B. v1.2 → v1.3)
+3. Änderung in den Commit aufnehmen (nicht als separaten Commit)
+
+## Beispiel
+
+```html
+<!-- vorher -->
+<div id="version">v1.2</div>
+
+<!-- nachher -->
+<div id="version">v1.3</div>
+```
